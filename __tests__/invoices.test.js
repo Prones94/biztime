@@ -64,16 +64,51 @@ describe("POST /invoices", () => {
 })
 
 describe("PUT /invoices/:id", () => {
-  test("updates an invoice", async () => {
-    const invoice = await db.query("SELECT id FROM invoices LIMIT")
+  test("Updates invoice amount and marks as paid", async () => {
+    const invoice = await db.query("SELECT id FROM invoices LIMIT 1")
     const id = invoice.rows[0].id
 
-    const resp = await request(app).put(`/invoices/${id}`).send({ amt: 300 })
+    const resp = await request(app).put(`/invoices/${id}`).send({
+      amt: 500,
+      paid: true,
+    });
+
     expect(resp.statusCode).toBe(200)
     expect(resp.body.invoice).toMatchObject({
       id,
-      amt: 300,
+      amt: 500,
+      paid: true,
+      paid_date: expect.any(String),
     })
+  })
+
+  test("Unmarks a paid invoice", async () => {
+    const invoice = await db.query(
+      "UPDATE invoices SET paid=true, paid_date=CURRENT_DATE WHERE id = (SELECT id FROM invoices LIMIT 1) RETURNING id"
+    )
+    const id = invoice.rows[0].id
+
+    const resp = await request(app).put(`/invoices/${id}`).send({
+      amt: 500,
+      paid: false,
+    })
+
+    expect(resp.statusCode).toBe(200)
+    expect(resp.body.invoice).toMatchObject({
+      id,
+      amt: 500,
+      paid: false,
+      paid_date: null,
+    })
+  })
+
+  test("Returns 404 if invoice not found", async () => {
+    const resp = await request(app).put(`/invoices/9999`).send({
+      amt: 500,
+      paid: true,
+    })
+
+    expect(resp.statusCode).toBe(404)
   })
 })
 

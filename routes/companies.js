@@ -26,16 +26,29 @@ router.get("/:code", async (req,res,next) => {
       return res.status(404).json({ error: "Company not found"})
     }
 
-    const invoicesResult = await db.query(
-      "SELECT id FROM invoices WHERE comp_code = $1",
+    const industriesResult = await db.query(
+      `SELECT i.industry FROM industries AS i JOIN companies_industries AS ci ON i.code = ci.industry_code WHERE ci.company_code = $1`,
       [code]
-    );
+    )
 
     const compnay = companyResult.row[0]
-    company.invoices = invoicesResult.rows.map((inv) => inv.id)
+    const industries = industriesResult.rows.map((row) => row.industry)
 
-    return res.json({ company })
+    return res.json({ ...company, industries })
   } catch (err) {
+    return next(err)
+  }
+})
+
+// GET industries - List all industries
+router.get("/", async (req,res, next) => {
+  try {
+    const result = await db.query(
+      `SELECT i.code, i.industry, ARRAY_AGG(ci.company_code) AS companies FROM industries AS i LEFT JOIN companies_industries AS ci ON i.code = ci.industry_code GROUP BY i.code, i.industry`
+    );
+
+    return res.json({ industries: result.rows })
+  } catch(err) {
     return next(err)
   }
 })
@@ -62,6 +75,47 @@ router.post("/", async (req,res, next) => {
 
     return res.status(201).json({ company: result.rows[0] })
   } catch(err) {
+    return next(err)
+  }
+})
+
+// POST /industries - Add a new industry
+router.post("/",async (req,res, next) => {
+  try {
+    const { code, industry } = req.body
+
+    if (!code || !industry) {
+      return res.status(400).json({ error: "Code and industry are required" })
+    }
+
+    const result = await db.query(
+      `INSERT INTO industries (code, industry) VALUES ($1,$2) RETURNING code, industry`,
+      [code, industry]
+    );
+
+    return res.status(201).json({ industry: result.rows[0] })
+  } catch(err) {
+    return next(err)
+  }
+})
+
+// POST /industries/:code/companies - Associate an industry with a company
+router.post("/:code/companies", async (req,res, next) => {
+  try {
+    const { code } = req.params
+    const { company_code } = req.body
+
+    if (!company_code){
+      return res.status(400).json({ error: "Company code is required" })
+    }
+
+    const result = await db.query(
+      `INSERT INTO companies_industries (industry_code, company_code) VALUES ($1,$2) RETURNING industry_code, company_code`,
+      [code, company_code]
+    );
+
+    return res.status(201).json({ association: result.rows[0] })
+  } catch(err){
     return next(err)
   }
 })
