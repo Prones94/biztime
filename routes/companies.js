@@ -1,6 +1,7 @@
 const express = require("express")
 const db = require("../db")
 const router = new express.Router()
+const slugify = require('slugify')
 
 // GET /companies - Get list of companies
 router.get("/", async(req,res,next) => {
@@ -35,6 +36,32 @@ router.get("/:code", async (req,res,next) => {
 
     return res.json({ company })
   } catch (err) {
+    return next(err)
+  }
+})
+
+// POST /companies = Add a new company
+router.post("/", async (req,res, next) => {
+  try {
+    const { name, description } = req.body
+
+    if (!name || !description) {
+      return res.status(400).json({ error: "Name and description are required"})
+    }
+
+    const code = slugify(name, {
+      lower: true,
+      strict: true,
+      replacement: "-",
+    })
+
+    const result = await db.query(
+      "INSERT INTO companies (code, name, description) VALUES ($1, $2, $3) RETURNING code, name, description",
+      [code, name, description]
+    )
+
+    return res.status(201).json({ company: result.rows[0] })
+  } catch(err) {
     return next(err)
   }
 })
